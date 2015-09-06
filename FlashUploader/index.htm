@@ -1,0 +1,274 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Flash Uploader! By Fight for Coding</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+    <link rel="stylesheet" href="css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="css/bootstrap-theme.min.css"/>
+    <link rel="stylesheet" href="css/fileinput.min.css"/>
+    <script type="text/javascript" src="js/jquery-1.11.3.min.js"></script>
+    <script type="text/javascript" src="js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="js/fileinput.min.js"></script>
+    <script type="text/javascript" src="js/spark-md5.min.js"></script>
+    <style>
+        .large_btn
+        {
+            height: 46px;
+            padding: 10px 16px;
+            font-size: 18px;
+            line-height: 1.3333333;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="jumbotron" style="color:White; background:linear-gradient(to bottom,#337ab7 0,#2e6da4 100%)">
+            <h1> Flash Uploader! </h1>
+            <h3><em> Upload your files instantly! </em><button class="btn btn-info" style="margin-left:50px" type="button" data-toggle="button" title="Flash Uploader"  
+                data-container="body" data-placement="right" 
+                data-content="Developed by <b>Anran</b>, using C#, ASP.NET, Bootstrap, JQuery and HTML5.">Learn More</button></h3>
+            
+        </div>
+        <div class="panel panel-primary">
+            <div class="panel-heading">Your file list:</div>
+            <table class="table table-striped table-hover" id="tblList">
+                
+            </table>
+        </div>
+        <div class="panel panel-default" style="text-align:center;">
+            <button class="btn btn-primary large_btn" type="button" data-toggle="modal" data-target="#myModal" style="margin:20px"><strong>Upload!</strong></button>
+        </div>
+        <hr />
+        <div class="footer">
+            <p class="pull-right"><a href="#">Return to top</a></p>
+            <p>Developed by <b>Anran</b> at Glodon coding competition, 2015.</p>
+            </div>
+    </div>
+
+
+    <div class="modal fade" id="myModal" tabindex="-1" role="dialog" 
+        aria-labelledby="myModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" 
+                        data-dismiss="modal" aria-hidden="true">
+                        &times;
+                    </button>
+                    <h4 class="modal-title" id="myModalLabel">
+                        Upload a file
+                    </h4>
+                </div>
+                <div class="modal-body">
+                    <form id="uploadForm" action="Upload.aspx">
+                        <input id="fileUpload" name="file" type="file" multiple=false class="file-loading"/>
+                        <script>
+                            $(document).on('ready', function () {
+                                $("#fileUpload").fileinput({
+                                    showUpload: false,
+                                    maxFileCount: 1,
+                                    mainClass: "input-group-lg"
+                                });
+                            });
+                        </script>
+
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <div class="progress  progress-striped active" id="progressBarContainer" style="width:50%; float:left; height: 30px; margin-top:10px;  visibility:hidden">
+                       <div class="progress-bar" id="progressBar" role="progressbar" aria-valuenow="0" 
+                          aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                          <span class="sr-only">0%</span>
+                       </div>
+                    </div>
+                    <button type="button" class="btn btn-default large_btn" 
+                        data-dismiss="modal">Close
+                    </button>
+                    <button type="button" id="uploadSubmit" class="btn btn-primary large_btn" data-loading-text="Uploading...">
+                        Upload!
+                    </button>
+
+                </div>
+           
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal -->
+    </div>
+    <script type="text/javascript" language="javascript">
+        $(function () { $("[data-toggle='button']").popover(); });
+        function getMD5(file, callback) {
+            var fileReader = new FileReader(),
+            blobSlice = File.prototype.mozSlice || File.prototype.webkitSlice || File.prototype.slice,
+            chunkSize = 2097152,
+            chunks = Math.ceil(file.size / chunkSize),
+            currentChunk = 0,
+            spark = new SparkMD5();
+
+            fileReader.onload = function (e) {
+                spark.appendBinary(e.target.result);
+                currentChunk++;
+
+                if (currentChunk < chunks) {
+                    loadNext();
+                } else {
+                    console.log("finished loading");
+                    var hash = spark.end();
+                    callback(hash);
+                }
+            };
+
+            function loadNext() {
+                var start = currentChunk * chunkSize, end = start + chunkSize >= file.size ? file.size : start + chunkSize;
+                fileReader.readAsBinaryString(blobSlice.call(file, start, end));
+            }
+
+            loadNext();
+        }
+        var removing=false;
+        function remove(id, callback){
+            if(removing)return;
+            $("#listTr"+id).class="danger";
+            removing=true;
+            $.get("uploader.asmx/RemoveFile?ID="+id,function(data){
+                callback(id);
+            });
+        }
+        function removeCallback(id){
+            loadFileList();
+            removing = false;
+        }
+
+        function checkLength(len, existCallback, notCallback){
+            $.getJSON("uploader.asmx/CheckSize?size="+len,function(json){
+                if(json.exists)existCallback();
+                else notCallback();
+                });
+        }
+
+        function checkMD5(md5, existCallback, notCallback){
+            $.getJSON("uploader.asmx/CheckMD5?hex="+md5, function(json){
+                if(json.exists)existCallback(json.ID_if_any);
+                else notCallback();
+                }); 
+        }
+
+        //upload
+        $("#uploadSubmit").click(function () {
+            var uploadSubmit = $(this);
+            $(this).button('loading');
+            var file = $("#fileUpload")[0].files[0];
+            if (file) {
+                var tick = (new Date()).valueOf();
+
+                var fun = function () {
+
+                    var formData = new FormData($("#uploadForm")[0]);
+                    formData.append("file", file);
+                    var url = "upload.aspx?name=" + encodeURIComponent(file.name) + "&len=" + encodeURIComponent(file.size);
+                    $.ajax({
+                        url: url,
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function (responseStr) {
+                            alert("Upload succeed! Average transmission speed: " + (file.size / ((new Date()).valueOf() - tick)) + " KB/s.");
+                            document.getElementById('progressBarContainer').style.visibility = "hidden";
+                            uploadSubmit.button("reset");
+                            document.getElementById("uploadForm").reset();
+                            loadFileList();
+                        },
+                        error: function (responseStr) {
+                            alert("Upload error: " + JSON.stringify(responseStr));
+                            document.getElementById('progressBarContainer').style.visibility = "hidden";
+                            uploadSubmit.button("reset");
+                        },
+                        xhr: function () {
+                            var xhr = new window.XMLHttpRequest();
+                            //Upload progress
+                            xhr.upload.addEventListener("progress", function (evt) {
+                                if (evt.lengthComputable) {
+                                    var percentComplete = Math.round(evt.loaded * 100 / evt.total);
+                                    document.getElementById('progressBar').innerHTML = percentComplete.toString() + '%';
+                                    document.getElementById('progressBar').style.width = percentComplete + "%";
+                                    document.getElementById('progressBarContainer').style.visibility = "visible";
+
+                                }
+                            }, false);
+
+                            return xhr;
+                        }
+                    });
+                };
+
+                //first check file size
+                checkLength(file.size, function () {
+
+                    console.log("length duplicate");
+                    getMD5(file, function (md5) {
+                        checkMD5(md5, function (id) {
+                            console.log("md5 duplicate");
+                            $.ajax({
+                                url: "uploader.asmx/UploadExisting?name=" + file.name + "&ID=" + id,
+                                type: 'GET',
+                                success: function (responseStr) {
+                                    alert("Upload succeed! Average transmission speed: " + (file.size / ((new Date()).valueOf() - tick)) + " KB/s.");
+                                    document.getElementById('progressBarContainer').style.visibility = "hidden";
+                                    uploadSubmit.button("reset");
+                                    document.getElementById("uploadForm").reset();
+                                    loadFileList();
+                                },
+                                error: function (responseStr) {
+                                    alert("Upload error: " + JSON.stringify(responseStr));
+                                    document.getElementById('progressBarContainer').style.visibility = "hidden";
+                                    uploadSubmit.button("reset");
+                                },
+                                xhr: function () {
+                                    var xhr = new window.XMLHttpRequest();
+                                    //Upload progress
+                                    xhr.upload.addEventListener("progress", function (evt) {
+                                        if (evt.lengthComputable) {
+                                            var percentComplete = Math.round(evt.loaded * 100 / evt.total);
+                                            document.getElementById('progressBar').innerHTML = percentComplete.toString() + '%';
+                                            document.getElementById('progressBar').style.width = percentComplete + "%";
+                                            document.getElementById('progressBarContainer').style.visibility = "visible";
+
+                                        }
+                                    }, false);
+
+                                    return xhr;
+                                }
+                            });
+                        }, function () { fun(); });
+                    });
+                }, function () { fun(); });
+            }
+
+            else {
+                alert("You must choose a file.");
+                uploadSubmit.button("reset");
+            }
+        });
+
+        function time(timestamp) {
+
+            console.log(timestamp);
+            return new Date(timestamp*1000).toLocaleString()
+        }
+        function actionLink(id){
+            return "<a href=\"uploader.asmx/GetFile?ID="+id+"\"><span class=\"glyphicon glyphicon-download\"></span></a><a href=\"javascript:remove("+id+", removeCallback)\"> <span class=\"glyphicon glyphicon-trash\"></span></a>"
+        }
+        function loadFileList() {
+            $.getJSON("uploader.asmx/GetFileList", function (json) {
+                var innerHtml = "<thead><tr><th>File name</th><th>File size</th><th>Uploaded time</th><th>Actions</th></tr></thead>"
+                for (i = 0; i < json.length; i++) {
+                    innerHtml += "<tr><td>" + json[i].filename + "</td><td>" + json[i].length + "</td><td>" + time(json[i].time) + "</td><td>" + actionLink(json[i].ID) + "</td></tr>";
+                }
+                document.getElementById("tblList").innerHTML = innerHtml;
+            });
+        }
+        loadFileList();
+    </script>
+</body>
+</html>
